@@ -90,7 +90,12 @@ namespace QuantConnect.IBAutomater
         /// <summary>
         /// An unknown IB message window was detected
         /// </summary>
-        UnknownMessageWindowDetected
+        UnknownMessageWindowDetected,
+
+        /// <summary>
+        /// Too many failed login attempts, closing IBGateway.
+        /// </summary>
+        TooManyFailedLoginAttempts,
     }
 
     /// <summary>
@@ -156,6 +161,10 @@ namespace QuantConnect.IBAutomater
                 {
                     ErrorCode.UnknownMessageWindowDetected,
                     "An unknown IB message window was detected."
+                },
+                {
+                    ErrorCode.TooManyFailedLoginAttempts,
+                    "Too many failed login attempts"
                 }
             };
 

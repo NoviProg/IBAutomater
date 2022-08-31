@@ -429,6 +429,13 @@ namespace QuantConnect.IBAutomater
                     _ibAutomaterInitializeEvent.Set();
                 }
 
+                // Too many failed login attempts
+                else if (text.Contains("Too many failed login attempts"))
+                {
+                    _lastStartResult = new StartResult(ErrorCode.TooManyFailedLoginAttempts);
+                    _ibAutomaterInitializeEvent.Set();
+                }
+
                 // an existing session was detected
                 else if (text.Contains("Existing session detected"))
                 {
