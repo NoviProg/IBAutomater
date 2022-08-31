@@ -551,12 +551,10 @@ namespace QuantConnect.IBAutomater
 
                     // find new IBGateway process (created by auto-restart)
 
-                    var processName = IsWindows ? "ibgateway" : "java";
-
-                    var process = Process.GetProcessesByName(processName).FirstOrDefault();
+                    var process = GetIbGatewayProcess();
                     if (process == null)
                     {
-                        OutputDataReceived?.Invoke(this, new OutputDataReceivedEventArgs($"IBGateway restarted process not found: {processName}"));
+                        OutputDataReceived?.Invoke(this, new OutputDataReceivedEventArgs($"IBGateway restarted process not found"));
 
                         TraceIbLauncherLogFile();
 
@@ -564,7 +562,7 @@ namespace QuantConnect.IBAutomater
                     }
                     else
                     {
-                        OutputDataReceived?.Invoke(this, new OutputDataReceivedEventArgs($"IBGateway restarted process found: Id:{process.Id} - Name:{process.ProcessName}"));
+                        OutputDataReceived?.Invoke(this, new OutputDataReceivedEventArgs($"IBGateway restarted process found: Id:{process.Id} - Name:{process.ProcessName}. Arguments: {GetProcessArguments(process)}"));
 
                         // fire Restarted event so the client can reconnect only (without starting IBGateway)
                         Restarted?.Invoke(this, new EventArgs());
@@ -686,18 +684,11 @@ namespace QuantConnect.IBAutomater
 
             bool result;
             var utcTime = DateTime.UtcNow;
-            var time = utcTime.ConvertFromUtc(TimeZoneNewYork);
-            var timeOfDay = time.TimeOfDay;
+            var newYorkTime = utcTime.ConvertFromUtc(TimeZoneNewYork);
+            var newYorkTimeOfDay = newYorkTime.TimeOfDay;
 
-            // Note: we add 15 minutes *before* and *after* all time ranges for safety margin
-
-            // During the Friday evening reset period, all services will be unavailable in all regions for the duration of the reset.
-            if (time.DayOfWeek == DayOfWeek.Friday && timeOfDay > new TimeSpan(22, 45, 0) ||
-                // Occasionally the disconnection due to the IB reset period might last
-                // much longer than expected during weekends (even up to the cash sync time).
-                time.DayOfWeek == DayOfWeek.Saturday)
+            if (IsWithinWeekendServerResetTimes(utcTime))
             {
-                // Friday: 23:00 - 03:00 ET for all regions
                 result = true;
             }
             else
@@ -716,7 +707,7 @@ namespace QuantConnect.IBAutomater
                     case Region.Asia:
                     {
                         // Saturday - Thursday: First reset: 16:30 - 17:00 ET
-                        if (timeOfDay > new TimeSpan(16, 15, 0) && timeOfDay < new TimeSpan(17, 15, 0))
+                        if (newYorkTimeOfDay > new TimeSpan(16, 15, 0) && newYorkTimeOfDay < new TimeSpan(17, 15, 0))
                         {
                             result = true;
                         }
@@ -734,7 +725,7 @@ namespace QuantConnect.IBAutomater
                     default:
                     {
                         // Saturday - Thursday: 23:45 - 00:45 ET
-                        result = timeOfDay > new TimeSpan(23, 30, 0) || timeOfDay < new TimeSpan(1, 0, 0);
+                        result = newYorkTimeOfDay > new TimeSpan(23, 30, 0) || newYorkTimeOfDay < new TimeSpan(1, 0, 0);
                     }
                         break;
                 }
@@ -756,20 +747,29 @@ namespace QuantConnect.IBAutomater
         /// </summary>
         public bool IsWithinWeekendServerResetTimes()
         {
+            return IsWithinWeekendServerResetTimes(DateTime.UtcNow);
+        }
+
+        /// <summary>
+        /// Returns whether the current time is within the IB weekend server reset period.
+        /// </summary>
+        public bool IsWithinWeekendServerResetTimes(DateTime utcTime)
+        {
             // Use schedule based on server region:
             // https://www.interactivebrokers.com/en/index.php?f=2225
 
             bool result = false;
-            var utcTime = DateTime.UtcNow;
-            var time = utcTime.ConvertFromUtc(TimeZoneNewYork);
-            var timeOfDay = time.TimeOfDay;
+            var newYorkTime = utcTime.ConvertFromUtc(TimeZoneNewYork);
+            var newYorkTimeOfDay = newYorkTime.TimeOfDay;
 
             // Note: we add 15 minutes *before* and *after* all time ranges for safety margin
             // During the Friday evening reset period, all services will be unavailable in all regions for the duration of the reset.
-            if (time.DayOfWeek == DayOfWeek.Friday && timeOfDay > new TimeSpan(22, 45, 0) ||
+            if (newYorkTime.DayOfWeek == DayOfWeek.Friday && newYorkTimeOfDay > new TimeSpan(22, 45, 0) ||
                 // Occasionally the disconnection due to the IB reset period might last
                 // much longer than expected during weekends (even up to the cash sync time).
-                time.DayOfWeek == DayOfWeek.Saturday)
+                newYorkTime.DayOfWeek == DayOfWeek.Saturday ||
+                // Occasionally disconnection on the first hours of Sunday
+                newYorkTime.DayOfWeek == DayOfWeek.Sunday && newYorkTimeOfDay < new TimeSpan(2, 0, 0))
             {
                 // Friday: 23:00 - 03:00 ET for all regions
                 result = true;
@@ -1064,6 +1064,53 @@ namespace QuantConnect.IBAutomater
                 {
                     OutputDataReceived?.Invoke(this, new OutputDataReceivedEventArgs($"Error reading IB launcher log file: {exception.Message}"));
                 }
+            }
+        }
+
+        private string GetProcessArguments(Process process)
+        {
+            if (IsWindows)
+            {
+                // we don't need this and supporting it requires dependencies so let's just skip it
+                return "Not supported";
+            }
+
+            try
+            {
+                return File.ReadAllText($"/proc/{process.Id}/cmdline");
+            }
+            catch (Exception exception)
+            {
+                OutputDataReceived?.Invoke(this, new OutputDataReceivedEventArgs($"Error reading process cmdline: {exception.Message}"));
+            }
+            return string.Empty;
+        }
+
+        private Process GetIbGatewayProcess()
+        {
+            var processName = IsWindows ? "ibgateway" : "java";
+
+            var processes = Process.GetProcessesByName(processName);
+            if (processes == null || processes.Length == 0)
+            {
+                return null;
+            }
+            else if (processes.Length > 1)
+            {
+                OutputDataReceived?.Invoke(this, new OutputDataReceivedEventArgs($"Found multiple processes named: '{processName}'"));
+
+                // in linux there's a short lived java launcher process but it doesn't have our jar as argument
+                var filteredProcesses = processes.Where(p => GetProcessArguments(p).Contains("IBAutomater.jar", StringComparison.InvariantCultureIgnoreCase)).ToList();
+                if (filteredProcesses.Count != 1)
+                {
+                    return null;
+                }
+                return filteredProcesses.Single();
+            }
+            else
+            {
+                // happy case
+                return processes.Single();
             }
         }
     }
