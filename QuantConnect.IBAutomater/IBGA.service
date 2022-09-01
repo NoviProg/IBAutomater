@@ -1,9 +1,13 @@
 # /etc/systemd/system/IBGA.service
 [Unit]
 Description=IB Gatewey Automater service/daemon created from .NET worker template
+After=network-online.target 
+After=graphical.target
 
 [Service]
-Type=notify
+#Type=notify
+Type=simple
+
 # will set the Current Working Directory (CWD). Worker service will have issues without this setting
 WorkingDirectory=/home/ib_user/IBGA
 # systemd will run this executable to start the service
@@ -25,3 +29,7 @@ RestartSec=5
 # This environment variable is necessary when dotnet isn't loaded for the specified user.
 # To figure out this value, run 'env | grep DOTNET_ROOT' when dotnet has been loaded into your shell.
 #Environment=DOTNET_ROOT=/opt/rh/rh-dotnet31/root/usr/lib64/dotnet  
+
+[Install]
+#WantedBy=multi-user.target
+WantedBy=graphical.target
