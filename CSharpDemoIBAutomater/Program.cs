@@ -24,7 +24,7 @@ namespace CSharpDemoIBAutomater
         {
             // IBAutomater settings
             var ibDirectory = IsLinux ? "~/Jts" : "C:\\Jts";
-            var ibVersion = "974";
+            var ibVersion = "1021";
             var ibUserName = "myusername";
             var ibPassword = "mypassword";
             var ibTradingMode = "paper";

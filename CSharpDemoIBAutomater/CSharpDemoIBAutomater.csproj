@@ -11,4 +11,9 @@
   <ItemGroup>
     <ProjectReference Include="..\QuantConnect.IBAutomater\QuantConnect.IBAutomater.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Update="IBAutomater.jar">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>
