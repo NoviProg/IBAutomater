@@ -96,6 +96,11 @@ namespace QuantConnect.IBAutomater
         /// Too many failed login attempts, closing IBGateway.
         /// </summary>
         TooManyFailedLoginAttempts,
+        
+        /// <summary>
+        /// The IBGateway soft restart timed out
+        /// </summary>
+        SoftRestartTimeout
     }
 
     /// <summary>
@@ -165,6 +170,10 @@ namespace QuantConnect.IBAutomater
                 {
                     ErrorCode.TooManyFailedLoginAttempts,
                     "Too many failed login attempts"
+                },
+                {
+                    ErrorCode.SoftRestartTimeout,
+                    "The IBGateway soft restart timed out."
                 }
             };
 
